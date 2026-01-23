@@ -1,0 +1,12 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: test-postgres-persistence
+  description: Component để test xem PostgreSQL có lưu persistent data không
+  tags:
+    - test
+    - postgres
+spec:
+  type: service
+  lifecycle: experimental
+  owner: user:default/guest
