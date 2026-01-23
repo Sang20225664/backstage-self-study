@@ -321,152 +321,546 @@ yarn start
 
 ---
 
-## Ex2: Setup PostgreSQL Database
+## Ex2: Tạo PostgreSQL Container Template
 
 **Ngày thực hiện:** 23/01/2026
 
-### 1. Cài đặt PostgreSQL
+### Mục tiêu
 
-```bash
-# Update package list
-sudo apt update
+Tạo Backstage Software Template để sinh ra Docker commands tạo PostgreSQL containers ở local.
 
-# Cài đặt PostgreSQL 16
-sudo apt install postgresql postgresql-contrib -y
-
-# Kiểm tra service đã chạy
-systemctl is-active postgresql  # Output: active
-```
-
-**✅ PostgreSQL 16 installed**
+**⚠️ Note:** Đây KHÔNG phải là setup PostgreSQL làm database cho Backstage. Đây là tạo template để user có thể tạo PostgreSQL containers cho các dự án khác.
 
 ---
 
-### 2. Tạo Database và User
+### 1. Tạo Template Structure
 
 ```bash
-# Tạo user 'backstage' với password 'backstage'
-sudo -u postgres psql -c "CREATE USER backstage WITH PASSWORD 'backstage';"
-
-# Tạo database 'backstage' owned by user 'backstage'
-sudo -u postgres psql -c "CREATE DATABASE backstage OWNER backstage;"
-
-# Grant quyền
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE backstage TO backstage;"
-
-# Grant SUPERUSER (cần cho migrations)
-sudo -u postgres psql -c "ALTER USER backstage WITH SUPERUSER;"
-```
-
-**✅ Database credentials:**
-- Database: `backstage`
-- User: `backstage`
-- Password: `backstage`
-- Host: `localhost`
-- Port: `5432`
-
----
-
-### 3. Test kết nối
-
-```bash
-# Test connection
-PGPASSWORD=backstage psql -U backstage -h localhost -d backstage -c "SELECT version();"
-
-# Kết quả: PostgreSQL 16.11 (Ubuntu...)
-# Bấm 'q' để thoát
+# Tạo thư mục template
+mkdir -p /home/tansang/Documents/Dev_DevOps/hello/templates/postgres-container
+cd /home/tansang/Documents/Dev_DevOps/hello/templates/postgres-container
 ```
 
 ---
 
-### 4. Cài đặt PostgreSQL driver cho Backstage
+### 2. Tạo Template File
 
-```bash
-cd hello/
+Tạo file `template.yaml`:
 
-# Install pg driver
-yarn workspace backend add pg
+```yaml
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: postgres-container-template
+  title: PostgreSQL Container Creator
+  description: Create a PostgreSQL container using Docker
+  tags:
+    - docker
+    - postgres
+    - database
+spec:
+  owner: user:default/guest
+  type: container
+  
+  parameters:
+    - title: Container Configuration
+      required:
+        - containerName
+        - postgresVersion
+        - port
+        - password
+        - database
+      properties:
+        containerName:
+          title: Container Name
+          type: string
+          description: Name for the PostgreSQL container
+          default: my-postgres
+        postgresVersion:
+          title: PostgreSQL Version
+          type: string
+          description: PostgreSQL version to use
+          enum:
+            - '16'
+            - '15'
+            - '14'
+            - '13'
+          default: '16'
+        port:
+          title: Host Port
+          type: number
+          description: Port on host machine (maps to container port 5432)
+          default: 5432
+        password:
+          title: PostgreSQL Password
+          type: string
+          description: Password for postgres user
+          default: postgres
+        database:
+          title: Database Name
+          type: string
+          description: Name of the default database
+          default: mydb
+
+  steps:
+    - id: show-docker-command
+      name: Show Docker Command
+      action: debug:log
+      input:
+        message: |
+          PostgreSQL Container Setup Instructions:
+          
+          To create the container, run this command:
+          
+          docker run -d \
+            --name ${{ parameters.containerName }} \
+            -p ${{ parameters.port }}:5432 \
+            -e POSTGRES_PASSWORD=${{ parameters.password }} \
+            -e POSTGRES_DB=${{ parameters.database }} \
+            --restart unless-stopped \
+            postgres:${{ parameters.postgresVersion }}
+          
+          Connection details:
+          - Host: localhost
+          - Port: ${{ parameters.port }}
+          - Database: ${{ parameters.database }}
+          - User: postgres
+          - Password: ${{ parameters.password }}
+
+  output:
+    text:
+      - title: Docker Command
+        content: |
+          Run this command to create the PostgreSQL container:
+          
+          ```bash
+          docker run -d \
+            --name ${{ parameters.containerName }} \
+            -p ${{ parameters.port }}:5432 \
+            -e POSTGRES_PASSWORD=${{ parameters.password }} \
+            -e POSTGRES_DB=${{ parameters.database }} \
+            --restart unless-stopped \
+            postgres:${{ parameters.postgresVersion }}
+          ```
+          
+          Verify container is running:
+          ```bash
+          docker ps | grep ${{ parameters.containerName }}
+          ```
+      - title: Connection String
+        content: |
+          **Connection Details:**
+          - Host: `localhost`
+          - Port: `${{ parameters.port }}`
+          - Database: `${{ parameters.database }}`
+          - User: `postgres`
+          - Password: `${{ parameters.password }}`
+          
+          **Connection String:**
+          ```
+          postgresql://postgres:${{ parameters.password }}@localhost:${{ parameters.port }}/${{ parameters.database }}
+          ```
+    links:
+      - title: Container Info
+        icon: catalog
+        url: '#'
 ```
 
 ---
 
-### 5. Cấu hình Backstage
+### 3. Đăng ký Template vào Backstage
 
 Sửa file `app-config.yaml`:
 
 ```yaml
-backend:
-  # ... (giữ nguyên phần trên)
-  
-  # PostgreSQL configuration
-  database:
-    client: pg
-    connection:
-      host: localhost
-      port: 5432
-      user: backstage
-      password: backstage
-      database: backstage
-```
-
-**Thay thế:**
-```yaml
-# Xóa config cũ:
-database:
-  client: better-sqlite3
-  connection: ':memory:'
+catalog:
+  locations:
+    # Existing locations...
+    
+    # Add PostgreSQL template
+    - type: file
+      target: ../../templates/postgres-container/template.yaml
+      rules:
+        - allow: [Template]
 ```
 
 ---
 
-### 6. Khởi động Backstage với PostgreSQL
+### 4. Restart Backstage
 
 ```bash
-cd hello/
+cd /home/tansang/Documents/Dev_DevOps/hello
 yarn start
 ```
 
-**✅ Xác nhận thành công trong logs:**
+**✅ Xác nhận template loaded:**
 ```
-catalog info Performing database migration
-Plugin initialization complete
+catalog info Performing location refresh
+catalog info Successfully loaded template postgres-container-template
 ```
 
 ---
 
-### 7. Xác minh data trong PostgreSQL
+### 5. Test Template
+
+#### 5.1. Truy cập Template UI
+
+1. Mở browser: http://localhost:3000/create
+2. Tìm template **"PostgreSQL Container Creator"**
+3. Click **"Choose"**
+
+#### 5.2. Điền Form
+
+- **Container Name:** `test-postgres`
+- **PostgreSQL Version:** `16`
+- **Host Port:** `5433` (tránh conflict nếu port 5432 đã dùng)
+- **Password:** `mypassword`
+- **Database Name:** `testdb`
+
+Click **"Review"** → **"Create"**
+
+#### 5.3. Copy và Run Docker Command
+
+Template sẽ hiển thị Docker command, copy và chạy:
 
 ```bash
-# Xem các tables đã được tạo
-PGPASSWORD=backstage psql -U backstage -h localhost -d backstage -c "\dt"
+docker run -d \
+  --name test-postgres \
+  -p 5433:5432 \
+  -e POSTGRES_PASSWORD=mypassword \
+  -e POSTGRES_DB=testdb \
+  --restart unless-stopped \
+  postgres:16
+```
 
-# Sẽ thấy nhiều tables:
-# - final_entities
-# - refresh_state_references  
-# - search
-# - (và nhiều tables khác của các plugins)
+#### 5.4. Verify Container
+
+```bash
+# Check container đang chạy
+docker ps | grep test-postgres
+
+# Test kết nối
+docker exec test-postgres psql -U postgres -d testdb -c "SELECT version();"
+```
+
+**✅ Expected output:**
+```
+PostgreSQL 16.11 (Debian 16.11-1.pgdg13+1)...
 ```
 
 ---
 
-### 8. So sánh với SQLite
+### 6. Test Multiple Containers
 
-| Feature | SQLite (default) | PostgreSQL |
-|---------|------------------|------------|
-| **Storage** | In-memory | Persistent disk |
-| **Production** | ❌ Not recommended | ✅ Recommended |
-| **Data retention** | Lost on restart | ✅ Persistent |
-| **Performance** | Limited | ✅ Better for scale |
-| **Multi-user** | Limited | ✅ Full support |
+Tạo container thứ 2 với port khác:
+
+```bash
+docker run -d \
+  --name test-postgres-2 \
+  -p 5434:5432 \
+  -e POSTGRES_PASSWORD=password2 \
+  -e POSTGRES_DB=testdb2 \
+  --restart unless-stopped \
+  postgres:16
+```
+
+---
+
+### 7. Cleanup
+
+```bash
+# Stop containers
+docker stop test-postgres test-postgres-2
+
+# Remove containers
+docker rm test-postgres test-postgres-2
+
+# Verify
+docker ps -a | grep test-postgres
+```
+
+---
+
+### 8. Template Features
+
+**✅ What the template does:**
+- ✅ Provides form for container configuration
+- ✅ Validates inputs (required fields, enum values)
+- ✅ Generates Docker run command with user's parameters
+- ✅ Shows connection string for database clients
+- ✅ Displays verification commands
+
+**🔍 Implementation Approach: Option 1 (Manual Execution)**
+- Template generates command → User copies → User runs in terminal
+- **Pros:** Simple, secure, no custom backend code needed
+- **Cons:** Not fully automated, requires manual step
+
+**💡 Alternative: Option 2 (Auto Execution)**
+- Would require custom scaffolder action to execute Docker commands
+- More complex, needs backend module with new Backstage API
+- Security concerns (giving Backstage Docker access)
+
+---
+
+### 9. Troubleshooting
+
+#### Port Already in Use
+```bash
+# Error: port is already allocated
+# Solution: Use different port (5433, 5434, etc.)
+```
+
+#### Container Name Conflict
+```bash
+# Error: container name already in use
+# Solution:
+docker rm <container-name>  # Or use different name
+```
+
+#### Can't Connect to Database
+```bash
+# Wait 5-10 seconds after starting (PostgreSQL needs init time)
+# Check container logs:
+docker logs <container-name>
+```
 
 ---
 
 **Lab 2 Status: ✅ COMPLETE**
 
-- ✅ PostgreSQL 16 installed
-- ✅ Database và user created  
-- ✅ Backstage config updated
-- ✅ Database migrations successful
-- ✅ Data persisted trong PostgreSQL
+- ✅ Template created at `templates/postgres-container/`
+- ✅ Template registered in `app-config.yaml`
+- ✅ Template loads in Backstage UI
+- ✅ Form validates user inputs
+- ✅ Docker command generated correctly
+- ✅ Container created and running successfully
+- ✅ PostgreSQL connection verified
+
+**Implementation:** Option 1 (Manual command execution) - Simple and working! ✅
+
+---
+
+## Ex3: Software Catalog Setup
+
+**Ngày thực hiện:** 23/01/2026
+
+### Giới thiệu
+
+Software Catalog là trung tâm của Backstage, nơi quản lý:
+- **Components:** Microservices, libraries, websites, mobile apps
+- **APIs:** REST, GraphQL, gRPC endpoints
+- **Resources:** Databases, S3 buckets, queues
+- **Systems:** Nhóm các components lại thành hệ thống lớn
+- **Groups/Users:** Quản lý ownership và teams
+
+---
+
+### 1. Tạo Component Structure
+
+#### 1.1. Tạo demo service với catalog-info.yaml
+
+```bash
+# Tạo thư mục cho demo service
+mkdir -p /home/tansang/Documents/Dev_DevOps/hello/demo-services/backend-api
+cd /home/tansang/Documents/Dev_DevOps/hello/demo-services/backend-api
+
+# Tạo catalog-info.yaml
+cat > catalog-info.yaml << 'EOF'
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: backend-api
+  description: Backend API service cho demo application
+  tags:
+    - python
+    - fastapi
+    - backend
+spec:
+  type: service
+  lifecycle: production
+  owner: user:default/guest
+EOF
+```
+
+---
+
+### 2. Register Component vào Backstage
+
+#### Cách 1: Qua UI (đơn giản nhất)
+
+1. Push code lên Git:
+   ```bash
+   cd /home/tansang/Documents/Dev_DevOps/hello
+   git add demo-services/
+   git commit -m "Add backend-api component"
+   git push
+   ```
+
+2. Mở browser: http://localhost:3000
+3. Click **"Create..."** → **"Register Existing Component"**
+4. Nhập GitHub raw URL của `catalog-info.yaml`
+5. Click **"Analyze"** → **"Import"**
+
+#### Cách 2: Thêm vào app-config.yaml (tự động load khi start)
+
+Thêm vào file `hello/app-config.yaml`:
+
+```yaml
+catalog:
+  locations:
+    # ... existing locations ...
+    
+    # Demo backend API
+    - type: file
+      target: ../../demo-services/backend-api/catalog-info.yaml
+```
+
+**Restart Backstage:**
+```bash
+# Ctrl+C để stop, sau đó:
+yarn start
+```
+
+---
+
+### 3. Tạo System để nhóm Components
+
+```bash
+# Tạo system definition
+cat > /home/tansang/Documents/Dev_DevOps/hello/demo-services/systems.yaml << 'EOF'
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: demo-system
+  description: Demo system for learning Backstage
+  tags:
+    - demo
+    - learning
+spec:
+  owner: user:default/guest
+EOF
+```
+
+Update backend-api component để link với system:
+
+```yaml
+# Trong backend-api/catalog-info.yaml, thêm vào spec:
+spec:
+  type: service
+  lifecycle: production
+  owner: user:default/guest
+  system: demo-system     # ← Thêm dòng này
+```
+
+---
+
+### 4. Restart Backstage và xác nhận
+
+```bash
+# Stop Backstage
+pkill -f 'yarn start'
+
+# Start lại
+cd /home/tansang/Documents/Dev_DevOps/hello
+yarn start
+```
+
+**Đợi 30-60 giây** để Backstage khởi động và process entities.
+
+---
+
+### 5. Xem Catalog
+
+**Truy cập:** http://localhost:3000/catalog
+
+#### 5.1. Xem Component
+
+1. Filter **Kind = Component**
+2. Tìm `backend-api` trong danh sách
+3. Click vào để xem chi tiết:
+   - Description: "Backend API service cho demo application"
+   - Owner: user:guest
+   - Lifecycle: production
+   - Tags: python, fastapi, backend
+
+#### 5.2. Xem System
+
+1. Filter **Kind = System**
+2. Tìm `demo-system`
+3. Click để xem chi tiết
+
+#### 5.3. Filter và Search
+
+**Filter options:**
+- **Kind:** Component, System, API, Resource, Group, User
+- **Owner:** guest, team names
+- **Lifecycle:** experimental, production, deprecated
+- **Tags:** python, backend, frontend...
+
+**Search:** Gõ tên component trong search box
+
+---
+
+### 6. Cấu trúc Catalog Entity (tóm tắt)
+
+```yaml
+apiVersion: backstage.io/v1alpha1
+kind: Component                    # Loại entity
+metadata:
+  name: backend-api                # Tên unique
+  description: Mô tả service       # Description
+  tags:                            # Tags để filter
+    - python
+    - backend
+spec:
+  type: service                    # service, website, library
+  lifecycle: production            # experimental, production, deprecated
+  owner: user:default/guest        # Owner (user hoặc team)
+  system: demo-system              # Thuộc system nào (optional)
+```
+
+**Các loại Entity:**
+- **Component:** Services, libraries, websites
+- **System:** Nhóm các components lại
+- **API:** REST/GraphQL/gRPC endpoints
+- **Resource:** Databases, queues, storage
+- **Group:** Teams/departments
+- **User:** Individual developers
+
+---
+
+### 7. Link Component với System (optional)
+
+Để link `backend-api` với `demo-system`:
+
+```bash
+# Edit backend-api/catalog-info.yaml
+# Thêm dòng system vào spec:
+```
+
+```yaml
+spec:
+  type: service
+  lifecycle: production
+  owner: user:default/guest
+  system: demo-system     # ← Thêm dòng này
+```
+
+**Restart Backstage** để áp dụng thay đổi.
+
+---
+
+**Lab 3 Status: ✅ COMPLETE**
+
+- ✅ Hiểu cấu trúc catalog entities (YAML format)
+- ✅ Tạo Component với catalog-info.yaml
+- ✅ Tạo System với systems.yaml
+- ✅ Register entities vào Backstage qua app-config.yaml
+- ✅ Browse và filter catalog với nhiều options
+- ✅ Component `backend-api` hiển thị đầy đủ thông tin
+
+**Kết quả:** Component `backend-api` đã xuất hiện trong Catalog với đầy đủ metadata (description, tags, owner, lifecycle)
+
+**Next:** Lab 4 - TechDocs (Documentation) hoặc GitHub Integration
 
 ---
