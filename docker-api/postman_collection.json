@@ -1,0 +1,135 @@
+{
+    "info": {
+        "name": "Docker Container API",
+        "description": "REST API for managing Docker containers - Ex3",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Health Check",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3001/health",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3001",
+                    "path": [
+                        "health"
+                    ]
+                },
+                "description": "Check if API is running"
+            }
+        },
+        {
+            "name": "List All Containers",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3001/api/containers",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3001",
+                    "path": [
+                        "api",
+                        "containers"
+                    ]
+                },
+                "description": "Get list of all Docker containers (running and stopped)"
+            }
+        },
+        {
+            "name": "Get Container Details",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3001/api/containers/my-postgres",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3001",
+                    "path": [
+                        "api",
+                        "containers",
+                        "my-postgres"
+                    ]
+                },
+                "description": "Get detailed information about a specific container"
+            }
+        },
+        {
+            "name": "Start Container",
+            "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3001/api/containers/my-postgres/start",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3001",
+                    "path": [
+                        "api",
+                        "containers",
+                        "my-postgres",
+                        "start"
+                    ]
+                },
+                "description": "Start a stopped container"
+            }
+        },
+        {
+            "name": "Stop Container",
+            "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3001/api/containers/my-postgres/stop",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3001",
+                    "path": [
+                        "api",
+                        "containers",
+                        "my-postgres",
+                        "stop"
+                    ]
+                },
+                "description": "Stop a running container"
+            }
+        },
+        {
+            "name": "Restart Container",
+            "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                    "raw": "http://localhost:3001/api/containers/my-postgres/restart",
+                    "protocol": "http",
+                    "host": [
+                        "localhost"
+                    ],
+                    "port": "3001",
+                    "path": [
+                        "api",
+                        "containers",
+                        "my-postgres",
+                        "restart"
+                    ]
+                },
+                "description": "Restart a container"
+            }
+        }
+    ]
+}

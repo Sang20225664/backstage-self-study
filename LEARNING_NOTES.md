@@ -864,3 +864,435 @@ spec:
 **Next:** Lab 4 - TechDocs (Documentation) hoặc GitHub Integration
 
 ---
+
+## Ex3: REST API for Docker Container Management
+
+**Ngày thực hiện:** 29/01/2026
+
+### Mục tiêu
+Xây dựng REST API để quản lý Docker containers (start/stop/restart) và test được bằng Postman.
+
+---
+
+### 1. Technology Stack
+
+#### Core Dependencies
+```json
+{
+  "express": "^4.18.2",      // Web framework
+  "dockerode": "^4.0.2",     // Docker SDK for Node.js
+  "cors": "^2.8.5"           // CORS support for frontend
+}
+```
+
+#### Dev Dependencies
+```json
+{
+  "nodemon": "^3.0.2"        // Auto-reload during development
+}
+```
+
+**Lý do chọn:**
+- **Express**: Framework Node.js đơn giản, phổ biến
+- **Dockerode**: Official Docker Engine API client
+- **CORS**: Cần thiết cho Ex4 (frontend integration)
+- **Nodemon**: Dev tool để auto-reload khi code thay đổi
+
+---
+
+### 2. Project Structure
+
+```
+docker-api/
+├── src/
+│   └── index.js              # Main API server
+├── package.json              # Dependencies & scripts
+├── README.md                 # API documentation
+├── TEST_RESULTS.md           # Test documentation
+├── postman_collection.json   # Postman collection
+└── .gitignore                # Git ignore file
+```
+
+---
+
+### 3. API Implementation
+
+#### 3.1. Docker Connection
+
+```javascript
+const Docker = require('dockerode');
+const docker = new Docker({ socketPath: '/var/run/docker.sock' });
+```
+
+**Docker Socket:**
+- **Path:** `/var/run/docker.sock`
+- **Permission:** User phải trong group `docker`
+- **Verify:** `groups | grep docker`
+
+---
+
+#### 3.2. API Endpoints Implemented
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Health check |
+| `/api/containers` | GET | List all containers |
+| `/api/containers/:name` | GET | Get container details |
+| `/api/containers/:name/start` | POST | Start container |
+| `/api/containers/:name/stop` | POST | Stop container |
+| `/api/containers/:name/restart` | POST | Restart container |
+
+---
+
+#### 3.3. Response Format
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "message": "Container started successfully",
+  "container": {
+    "id": "4f2ef612b49c",
+    "name": "test-postgres",
+    "status": "running",
+    "running": true,
+    "startedAt": "2026-01-29T03:18:45.929Z"
+  }
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "error": "Container is already running",
+  "message": "Container test-postgres is already running"
+}
+```
+
+---
+
+#### 3.4. Error Handling
+
+**State Validation:**
+- Starting already running container → 400 Bad Request
+- Stopping already stopped container → 400 Bad Request
+- Container not found → 500 with Docker error message
+
+**Docker Errors:**
+- Connection error → 500 with socket path info
+- API error → 500 with Docker daemon error
+
+---
+
+### 4. Running the Server
+
+#### 4.1. Install Dependencies
+
+```bash
+cd docker-api
+npm install
+```
+
+#### 4.2. Development Mode
+
+```bash
+npm run dev
+```
+
+**Output:**
+```
+🚀 Docker API Server running on http://localhost:3001
+📋 Available endpoints:
+   GET  /health
+   GET  /api/containers
+   GET  /api/containers/:name
+   POST /api/containers/:name/start
+   POST /api/containers/:name/stop
+   POST /api/containers/:name/restart
+```
+
+#### 4.3. Production Mode
+
+```bash
+npm start
+```
+
+#### 4.4. Background Mode (with nohup)
+
+```bash
+nohup node src/index.js > /tmp/docker-api.log 2>&1 &
+```
+
+**Check process:**
+```bash
+ps aux | grep "node.*index.js" | grep -v grep
+```
+
+**Stop server:**
+```bash
+pkill -f "node.*docker-api"
+```
+
+---
+
+### 5. Testing with curl
+
+#### 5.1. Health Check
+
+```bash
+curl http://localhost:3001/health
+```
+
+**Expected:**
+```json
+{
+  "status": "ok",
+  "message": "Docker API is running",
+  "timestamp": "2026-01-29T03:17:53.946Z"
+}
+```
+
+---
+
+#### 5.2. List All Containers
+
+```bash
+curl http://localhost:3001/api/containers?all=true
+```
+
+**Expected:**
+```json
+{
+  "success": true,
+  "total": 5,
+  "running": 1,
+  "stopped": 4,
+  "containers": [...]
+}
+```
+
+---
+
+#### 5.3. Get Container Details
+
+```bash
+curl http://localhost:3001/api/containers/test-postgres
+```
+
+---
+
+#### 5.4. Stop Container
+
+```bash
+curl -X POST http://localhost:3001/api/containers/test-postgres/stop
+```
+
+**Verify:**
+```bash
+docker ps --filter name=test-postgres
+# (empty - container stopped)
+```
+
+---
+
+#### 5.5. Start Container
+
+```bash
+curl -X POST http://localhost:3001/api/containers/test-postgres/start
+```
+
+**Verify:**
+```bash
+docker ps --filter name=test-postgres
+# test-postgres   Up 10 seconds
+```
+
+---
+
+#### 5.6. Restart Container
+
+```bash
+curl -X POST http://localhost:3001/api/containers/test-postgres/restart
+```
+
+---
+
+### 6. Testing with Postman
+
+#### 6.1. Import Collection
+
+1. Open Postman
+2. Click **Import** button
+3. Select `docker-api/postman_collection.json`
+4. Collection "Docker Container API" imported
+
+---
+
+#### 6.2. Postman Collection Structure
+
+```
+Docker Container API/
+├── Health Check (GET)
+├── List All Containers (GET)
+├── Get Container Details (GET)
+├── Start Container (POST)
+├── Stop Container (POST)
+└── Restart Container (POST)
+```
+
+All requests pre-configured with `http://localhost:3001`
+
+---
+
+#### 6.3. Test Workflow in Postman
+
+```
+1. Health Check → Verify API running
+2. List Containers → Find test container
+3. Get Details → Check current state
+4. Stop → Container stopped
+5. Start → Container running
+6. Restart → Container restarted
+```
+
+**Verify Results:**
+- Check response JSON
+- Verify `"success": true`
+- Check container state changes
+
+---
+
+### 7. Test Results Summary
+
+**Date:** 29/01/2026  
+**Status:** ✅ **ALL TESTS PASSED**
+
+| Test Case | Endpoint | Status |
+|-----------|----------|--------|
+| Health Check | `GET /health` | ✅ PASS |
+| List Containers | `GET /api/containers` | ✅ PASS |
+| Get Container | `GET /api/containers/:name` | ✅ PASS |
+| Stop Container | `POST /api/containers/:name/stop` | ✅ PASS |
+| Start Container | `POST /api/containers/:name/start` | ✅ PASS |
+| Restart Container | `POST /api/containers/:name/restart` | ✅ PASS |
+| Error: Already Running | `/api/containers/:name/start` | ✅ PASS |
+| Error: Not Found | `/api/containers/:name/start` | ✅ PASS |
+
+**Total:** 8/8 tests passed
+
+**Test Container:** `test-postgres` (PostgreSQL 16 from Ex2 template)
+
+**Detailed test results:** See `docker-api/TEST_RESULTS.md`
+
+---
+
+### 8. Ex3 Requirements Verification
+
+#### ✅ Requirements Met
+
+1. **Implement API start/stop docker container** ✅
+   - Start endpoint: `POST /api/containers/:name/start`
+   - Stop endpoint: `POST /api/containers/:name/stop`
+   - **Bonus:** Restart endpoint implemented
+   - **Bonus:** List & details endpoints for full management
+
+2. **API testable with Postman** ✅
+   - Postman collection: `postman_collection.json` ✅
+   - All endpoints documented with examples
+   - Import instructions provided
+   - Tested successfully (all 8 test cases passed)
+
+3. **Working with containers from Ex2** ✅
+   - Tested with `test-postgres` (created from Ex2 template)
+   - PostgreSQL 16 container on port 5433
+   - Start/stop operations verified with Docker CLI
+
+---
+
+### 9. Key Learnings
+
+#### 9.1. Docker API Integration
+- **Dockerode library:** Official Node.js Docker SDK
+- **Socket connection:** Direct communication via Unix socket
+- **Container states:** Running, stopped, paused, restarting
+- **Error handling:** Proper validation before operations
+
+#### 9.2. REST API Best Practices
+- **Consistent response format:** Always `{success, message, data/error}`
+- **Proper HTTP status codes:** 200, 400, 404, 500
+- **CORS enabled:** Ready for frontend integration
+- **Endpoint naming:** RESTful conventions (/api/resource/:id/action)
+
+#### 9.3. Testing Strategy
+- **curl first:** Quick validation during development
+- **Postman second:** Complete API testing & documentation
+- **Error scenarios:** Test both success and failure cases
+- **State verification:** Use Docker CLI to confirm changes
+
+---
+
+### 10. Common Issues & Solutions
+
+#### Issue 1: Permission Denied on Docker Socket
+
+**Error:**
+```
+Error: connect EACCES /var/run/docker.sock
+```
+
+**Solution:**
+```bash
+# Add user to docker group
+sudo usermod -aG docker $USER
+newgrp docker  # Refresh groups
+```
+
+---
+
+#### Issue 2: Port Already in Use
+
+**Error:**
+```
+Error: listen EADDRINUSE: address already in use :::3001
+```
+
+**Solution:**
+```bash
+# Find and kill process using port 3001
+lsof -ti:3001 | xargs kill -9
+```
+
+---
+
+#### Issue 3: Container Name Not Found
+
+**Error:**
+```json
+{
+  "success": false,
+  "error": "Failed to start container",
+  "message": "(HTTP code 404) no such container"
+}
+```
+
+**Solution:**
+- Check container name with `docker ps -a`
+- Container names are case-sensitive
+- Use exact name (e.g., `test-postgres`, not `test_postgres`)
+
+---
+
+**Ex3 Status: ✅ COMPLETE**
+
+- ✅ REST API implemented with Express & Dockerode
+- ✅ 6 endpoints: health, list, details, start, stop, restart
+- ✅ Postman collection created and working
+- ✅ All 8 test cases passed
+- ✅ Error handling for all scenarios
+- ✅ CORS enabled for frontend integration
+- ✅ Tested with Ex2 containers (test-postgres)
+
+**Next:** Ex4 - Integrate API into Backstage Frontend
+
+---
