@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const Docker = require('dockerode');
+const path = require('path');
 
 const app = express();
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
@@ -9,6 +10,9 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, '../public')));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -245,7 +249,8 @@ app.use((error, req, res, next) => {
 // Start server
 app.listen(PORT, () => {
     console.log(`🚀 Docker API Server running on http://localhost:${PORT}`);
-    console.log(`📋 Available endpoints:`);
+    console.log(`🌐 Web UI available at http://localhost:${PORT}`);
+    console.log(`📋 API endpoints:`);
     console.log(`   GET  /health`);
     console.log(`   GET  /api/containers`);
     console.log(`   GET  /api/containers/:name`);

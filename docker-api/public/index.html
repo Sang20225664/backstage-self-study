@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docker Container Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .status-bar {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        .status-item {
+            text-align: center;
+        }
+
+        .status-item .label {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .status-item .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .status-item.running .value {
+            color: #10b981;
+        }
+
+        .status-item.stopped .value {
+            color: #ef4444;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #d97706;
+        }
+
+        .containers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .container-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .container-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .container-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f3f4f6;
+        }
+
+        .container-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #1f2937;
+        }
+
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .status-badge.running {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-badge.exited {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .container-info {
+            margin-bottom: 15px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            color: #4b5563;
+            font-size: 0.95em;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #6b7280;
+        }
+
+        .info-value {
+            color: #1f2937;
+            text-align: right;
+            max-width: 60%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .container-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .container-actions .btn {
+            flex: 1;
+            justify-content: center;
+            font-size: 0.9em;
+            padding: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.3s ease;
+            z-index: 1000;
+            max-width: 400px;
+        }
+
+        .notification.success {
+            background: #10b981;
+        }
+
+        .notification.error {
+            background: #ef4444;
+        }
+
+        .notification.info {
+            background: #3b82f6;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .empty-state {
+            background: white;
+            padding: 60px;
+            border-radius: 15px;
+            text-align: center;
+            color: #6b7280;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+            color: #374151;
+        }
+
+        .icon {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐳 Docker Container Manager</h1>
+            <p>Manage your Docker containers with ease</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="label">Total Containers</div>
+                <div class="value" id="totalCount">-</div>
+            </div>
+            <div class="status-item running">
+                <div class="label">Running</div>
+                <div class="value" id="runningCount">-</div>
+            </div>
+            <div class="status-item stopped">
+                <div class="label">Stopped</div>
+                <div class="value" id="stoppedCount">-</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-primary" onclick="refreshContainers()">
+                🔄 Refresh
+            </button>
+            <button class="btn btn-success" onclick="startAll()">
+                ▶️ Start All
+            </button>
+            <button class="btn btn-danger" onclick="stopAll()">
+                ⏹️ Stop All
+            </button>
+        </div>
+
+        <div id="containersGrid" class="containers-grid">
+            <div class="loading">
+                <div class="spinner"></div>
+                Loading containers...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3001';
+        let containers = [];
+
+        // Show notification
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // Fetch containers from API
+        async function fetchContainers() {
+            try {
+                const response = await fetch(`${API_URL}/api/containers?all=true`);
+                const data = await response.json();
+
+                if (data.success) {
+                    containers = data.containers;
+                    updateStats(data.total, data.running, data.stopped);
+                    renderContainers();
+                } else {
+                    showNotification('Failed to load containers', 'error');
+                }
+            } catch (error) {
+                showNotification(`Error: ${error.message}`, 'error');
+                document.getElementById('containersGrid').innerHTML = `
+                    <div class="empty-state">
+                        <h3>⚠️ Connection Error</h3>
+                        <p>Cannot connect to Docker API at ${API_URL}</p>
+                        <p>Make sure the API server is running.</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Update statistics
+        function updateStats(total, running, stopped) {
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('runningCount').textContent = running;
+            document.getElementById('stoppedCount').textContent = stopped;
+        }
+
+        // Render containers
+        function renderContainers() {
+            const grid = document.getElementById('containersGrid');
+
+            if (containers.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state">
+                        <h3>📦 No Containers Found</h3>
+                        <p>There are no Docker containers on this system.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = containers.map(container => `
+                <div class="container-card">
+                    <div class="container-header">
+                        <div class="container-name">${container.name}</div>
+                        <div class="status-badge ${container.status}">
+                            ${container.status === 'running' ? '🟢' : '🔴'} ${container.status.toUpperCase()}
+                        </div>
+                    </div>
+                    
+                    <div class="container-info">
+                        <div class="info-row">
+                            <span class="info-label">Image:</span>
+                            <span class="info-value" title="${container.image}">${container.image}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">ID:</span>
+                            <span class="info-value">${container.id.substring(0, 12)}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">State:</span>
+                            <span class="info-value">${container.state}</span>
+                        </div>
+                        ${container.ports ? `
+                        <div class="info-row">
+                            <span class="info-label">Ports:</span>
+                            <span class="info-value" title="${container.ports}">${container.ports}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="container-actions">
+                        ${container.status === 'running' ? `
+                            <button class="btn btn-danger" onclick="stopContainer('${container.name}')">
+                                ⏹️ Stop
+                            </button>
+                            <button class="btn btn-warning" onclick="restartContainer('${container.name}')">
+                                🔄 Restart
+                            </button>
+                        ` : `
+                            <button class="btn btn-success" onclick="startContainer('${container.name}')">
+                                ▶️ Start
+                            </button>
+                        `}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Container actions
+        async function startContainer(name) {
+            try {
+                const response = await fetch(`${API_URL}/api/containers/${name}/start`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showNotification(`✅ Container "${name}" started successfully`, 'success');
+                    await fetchContainers();
+                } else {
+                    showNotification(`❌ ${data.error || data.message}`, 'error');
+                }
+            } catch (error) {
+                showNotification(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function stopContainer(name) {
+            try {
+                const response = await fetch(`${API_URL}/api/containers/${name}/stop`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showNotification(`✅ Container "${name}" stopped successfully`, 'success');
+                    await fetchContainers();
+                } else {
+                    showNotification(`❌ ${data.error || data.message}`, 'error');
+                }
+            } catch (error) {
+                showNotification(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function restartContainer(name) {
+            try {
+                const response = await fetch(`${API_URL}/api/containers/${name}/restart`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showNotification(`✅ Container "${name}" restarted successfully`, 'success');
+                    await fetchContainers();
+                } else {
+                    showNotification(`❌ ${data.error || data.message}`, 'error');
+                }
+            } catch (error) {
+                showNotification(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Bulk actions
+        async function startAll() {
+            const stoppedContainers = containers.filter(c => c.status !== 'running');
+            if (stoppedContainers.length === 0) {
+                showNotification('All containers are already running', 'info');
+                return;
+            }
+
+            showNotification(`Starting ${stoppedContainers.length} containers...`, 'info');
+            for (const container of stoppedContainers) {
+                await startContainer(container.name);
+            }
+        }
+
+        async function stopAll() {
+            const runningContainers = containers.filter(c => c.status === 'running');
+            if (runningContainers.length === 0) {
+                showNotification('No running containers to stop', 'info');
+                return;
+            }
+
+            showNotification(`Stopping ${runningContainers.length} containers...`, 'info');
+            for (const container of runningContainers) {
+                await stopContainer(container.name);
+            }
+        }
+
+        function refreshContainers() {
+            showNotification('Refreshing containers...', 'info');
+            fetchContainers();
+        }
+
+        // Auto-refresh every 5 seconds
+        setInterval(fetchContainers, 5000);
+
+        // Initial load
+        fetchContainers();
+    </script>
+</body>
+
+</html>
