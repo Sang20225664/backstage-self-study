@@ -1296,3 +1296,281 @@ lsof -ti:3001 | xargs kill -9
 **Next:** Ex4 - Integrate API into Backstage Frontend
 
 ---
+
+## Ex4: Docker Control Plugin for Backstage
+
+**Ngày thực hiện:** 29/01/2026  
+**Status:** COMPLETED
+
+### Tổng Quan
+
+Xây dựng plugin custom cho Backstage để quản lý containers Docker trực tiếp từ giao diện. Plugin hiển thị thông tin container, trạng thái, và cho phép start/stop/restart containers.
+
+### Kiến Trúc Hệ Thống
+
+```
+Browser (Backstage UI - Port 3000)
+    ↓ Request: /api/proxy/docker-api/containers/:name
+Backstage Backend (Port 7007)
+    ↓ Proxy Middleware routes to
+Docker API Server (Port 3001)
+    ↓ Docker SDK
+Docker Engine
+    ↓
+PostgreSQL Container: my-postgres
+```
+
+### 1. Docker Control Plugin Component
+
+**File:** `hello/plugins/docker-control/src/components/DockerControlPage/DockerControlPage.tsx` (455 lines)
+
+**Imports:**
+```typescript
+import { useEntity } from '@backstage/plugin-catalog-react';
+import { useApi, fetchApiRef, discoveryApiRef } from '@backstage/core-plugin-api';
+```
+
+**Component Hooks:**
+- `useEntity()` - Get component metadata & annotations
+- `useApi(fetchApiRef)` - Get fetch API with auth
+- `useApi(discoveryApiRef)` - Get backend URL dynamically
+
+**Key Methods:**
+1. `fetchContainerInfo()` - Fetch container details via proxy
+2. `performAction(action)` - Start/Stop/Restart container
+3. `formatPorts(ports)` - Convert Docker ports object to readable format
+
+**UI Components:**
+- Container Information Card
+- Actions Card (Start/Stop/Restart buttons)
+- Configuration Card (Display annotations)
+- Auto-refresh every 10 seconds
+
+**Data Fetching Pattern:**
+```typescript
+const backendUrl = await discoveryApi.getBaseUrl('proxy');
+const url = `${backendUrl}/docker-api/containers/${containerName}`;
+const response = await fetchApi.fetch(url);
+```
+
+### 2. Docker API Server (Express.js)
+
+**File:** `docker-api/src/index.js`
+
+**Endpoints Implemented:**
+- `GET /api/containers/:name` - Get container info
+- `POST /api/containers/:name/start` - Start container
+- `POST /api/containers/:name/stop` - Stop container
+- `POST /api/containers/:name/restart` - Restart container
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "container": {
+    "id": "3da29cbc1ddf",
+    "name": "my-postgres",
+    "status": "running",
+    "running": true,
+    "image": "postgres:16",
+    "ports": {
+      "5432/tcp": [{"HostPort": "5433"}]
+    }
+  }
+}
+```
+
+### 3. Proxy Configuration
+
+**File:** `hello/app-config.yaml`
+
+```yaml
+proxy:
+  endpoints:
+    '/docker-api':
+      target: 'http://localhost:3001/api'
+      changeOrigin: true
+      allowedHeaders: ['Authorization']
+      headers:
+        X-Custom-Source: backstage
+```
+
+**How It Works:**
+1. Frontend calls `/api/proxy/docker-api/containers/my-postgres`
+2. Backstage backend recognizes `/docker-api` endpoint
+3. Strips `/api/proxy/docker-api`, leaves `/containers/my-postgres`
+4. Forwards to `http://localhost:3001/api/containers/my-postgres`
+
+### 4. Component Registration
+
+**File:** `hello/catalog-entities/my-postgres-component.yaml`
+
+```yaml
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: my-postgres-db
+  title: PostgreSQL Container - my-postgres
+  annotations:
+    dev.sang.container.name: my-postgres
+    dev.sang.container.api: http://localhost:3001
+    dev.sang.container.port: "5435"
+    dev.sang.container.image: postgres:16
+    dev.sang.container.database: mydb
+spec:
+  type: service
+  owner: user:guest
+  lifecycle: experimental
+```
+
+**Annotations Used:**
+- `dev.sang.container.name` - Container name to query
+- `dev.sang.container.api` - API endpoint
+- `dev.sang.container.port` - Mapped port
+- `dev.sang.container.image` - Image name
+
+### 5. Troubleshooting Journey
+
+#### Problem 1: "Unexpected token '<', '<!DOCTYPE'..." JSON Parse Error
+
+**Root Cause:** Request hitting frontend (localhost:3000) instead of backend
+
+**Solution:**
+- Use `discoveryApi.getBaseUrl('proxy')` to get backend URL
+- Use `fetchApi.fetch()` instead of raw `fetch()`
+- fetchApiRef automatically injects auth token
+
+**Result:** Response now correctly routed to backend ✓
+
+#### Problem 2: 404 Not Found on Proxy Endpoint
+
+**Root Cause:** Proxy endpoint path mismatch
+
+**Details:**
+- Frontend building URL: `/api/proxy/docker-api/containers/...`
+- Proxy endpoint config was `/api/proxy/docker-api` (redundant)
+- Backstage auto-adds `/api/proxy` prefix
+
+**Solution:**
+- Change endpoint config from `/api/proxy/docker-api` to `/docker-api`
+- Let Backstage add the prefix automatically
+
+**Result:** 404 error resolved ✓
+
+#### Problem 3: Ports Displaying as [object Object]
+
+**Root Cause:** API returns ports as object, interface expected string
+
+**Solution:**
+- Create `formatPorts()` helper function
+- Parse Docker ports object format
+- Convert to readable format (e.g., "5433→5432/tcp")
+
+**Result:** Ports display correctly ✓
+
+### 6. Final Implementation
+
+**UI Features:**
+- Container Name: my-postgres
+- Status: RUNNING (green badge)
+- Container ID: 3da29cbc1ddf
+- Image: postgres:16
+- State: running
+- Ports: 5433→5432/tcp, 5433→5432/tcp
+- Actions: STOP CONTAINER, RESTART CONTAINER
+- Configuration section with all annotations
+
+**Buttons & Actions:**
+- STOP CONTAINER (pink button, when running)
+- RESTART CONTAINER (outline button)
+- START CONTAINER (when stopped)
+- REFRESH button for manual refresh
+
+**Auto-Features:**
+- Auto-refresh every 10 seconds
+- Loading states during fetch
+- Success/Error messages
+- Connection to backend via proxy
+- Authentication via fetchApiRef
+
+### 7. Key Learnings
+
+1. **Backstage Plugin Architecture**
+   - Plugins integrate via EntityPage routes
+   - useEntity() extracts component metadata
+   - useApi() hooks provide Backstage APIs
+
+2. **Service Discovery Pattern**
+   - discoveryApi.getBaseUrl() returns dynamic service URLs
+   - Allows proxy endpoint to work in any environment
+
+3. **Authentication Pattern**
+   - fetchApiRef automatically injects auth tokens
+   - Works with Backstage guest/user authentication
+
+4. **Proxy Middleware Concepts**
+   - Path matching and prefix stripping
+   - changeOrigin for host header preservation
+   - Custom headers for tracking
+
+5. **Docker SDK Usage**
+   - docker.getContainer(name) - Get container instance
+   - .inspect() - Get detailed container info
+   - .start(), .stop(), .restart() - Container actions
+
+6. **React Hooks in Backstage**
+   - useEffect for lifecycle management
+   - useState for component state
+   - Cleanup functions for intervals
+
+7. **Error Handling**
+   - Response status validation
+   - JSON parse error handling
+   - User-friendly error messages
+
+### 8. Testing Results
+
+**Direct API Test:**
+```bash
+curl http://localhost:3001/api/containers/my-postgres | jq '.'
+Response: 200 OK with full container data
+```
+
+**Proxy Test (Backend):**
+```bash
+curl http://localhost:7007/api/proxy/docker-api/containers/my-postgres
+Response: 200 OK (with auth token)
+```
+
+**UI Verification:**
+- Component page loads: ✓
+- "DOCKER CONTROL" tab visible: ✓
+- Container info displays: ✓
+- Ports format correct: ✓
+- Status badge shows: ✓
+- Action buttons work: ✓
+- Auto-refresh triggers: ✓
+
+### 9. File Summary
+
+**Created/Modified Files:**
+- `hello/plugins/docker-control/src/components/DockerControlPage/DockerControlPage.tsx` - 455 lines
+- `docker-api/src/index.js` - Docker API Server
+- `hello/app-config.yaml` - Proxy configuration
+- `hello/catalog-entities/my-postgres-component.yaml` - Component registration
+- `hello/packages/app/src/components/Root/Root.tsx` - Plugin integration
+
+**Total Code:** ~700+ lines of implementation
+
+### Ex4 Final Status: COMPLETE
+
+- Container information displayed correctly
+- All container actions (start/stop/restart) implemented
+- Proxy configuration working
+- Component registered in catalog
+- Plugin integrated into Backstage UI
+- End-to-end testing passed
+- All troubleshooting resolved
+
+---
+
